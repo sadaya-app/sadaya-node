@@ -30,7 +30,7 @@ export interface VerifyExpected {
   maxFeeBps?: number
   /** Sadaya's fee wallet, if you want to pin it. */
   feeRecipient?: string
-  /** Sadaya's recovery wallet, if you want to pin it. */
+  /** The route's recovery address, if you want to pin it. */
   recovery?: string
   /** The longest review window you accept, in days (MAX_REVIEW_DAYS, 31, by default). */
   maxReviewDays?: number

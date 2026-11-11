@@ -1,11 +1,10 @@
 // Verifies an order's address without trusting Sadaya.
 //
 // Every order is paid to an address that is a contract: CREATE2 from the official factory, with the route sealed
-// inside (your payout wallet, the fee, the recovery wallet, what the order accepts and, since factory v3, who splits
+// inside (your payout wallet, the fee, the `recovery` address, what the order accepts and, since factory v3, who splits
 // the order during the review window and until when). This library recomputes that address with the same formula as
-// the contract, and checks that the route pays you and that every payment link (uri) pays that address. If someone
-// compromised Sadaya and returned another address, another route or another link, verification fails and your store
-// never shows that address to the customer.
+// the contract, and checks that the route pays you and that every payment link (uri) pays that address. An address, a
+// route or a link that does not match fails verification, and your store never shows it to the customer.
 //
 // No dependencies and no Node APIs: it runs the same on Node 18+, Cloudflare Workers and browsers.
 
@@ -126,7 +125,7 @@ export function acceptedHash(accepted) {
 }
 
 /**
- * What the factory seals into each clone: merchant, fee wallet, fee, recovery wallet and the accepted list (94 bytes,
+ * What the factory seals into each clone: merchant, fee wallet, fee, `recovery` address and the accepted list (94 bytes,
  * factory v2) and, in v3 and v4, who splits the order during the review window and when that window ends (119 bytes).
  */
 export function routeArgs(route, version = route.open_after != null ? 3 : 2) {
@@ -196,7 +195,7 @@ function uriPays(n, address) {
  *   feeBps        your agreed fee in basis points (100 = 1%), exact; or maxFeeBps, the highest fee you accept (always
  *                 one of the two: without it, a route that charges you 10% would pass)
  *   feeRecipient  Sadaya's fee wallet, if you want to pin it
- *   recovery      Sadaya's recovery wallet, if you want to pin it
+ *   recovery      the route's recovery address, if you want to pin it
  *   maxReviewDays the longest review window you accept, in days (MAX_REVIEW_DAYS, 31, by default): until it ends only
  *                 Sadaya can split the order
  *   now           the moment of the check, in milliseconds (now, by default)
@@ -225,7 +224,7 @@ export function verifyOrder(order, expected = {}) {
     throw new SadayaVerificationError('The order\'s fee wallet is not the one you pinned.', 'fee_recipient')
   }
   if (expected.recovery && !same(route.recovery, expected.recovery)) {
-    throw new SadayaVerificationError('The order\'s recovery wallet is not the one you pinned.', 'recovery')
+    throw new SadayaVerificationError('The order\'s recovery address is not the one you pinned.', 'recovery')
   }
   // factories v3 and v4: the window in which only Sadaya can split the order cannot be longer than the one you accept
   if (route.open_after != null) {
