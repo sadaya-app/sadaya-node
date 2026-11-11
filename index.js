@@ -4,7 +4,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 import { verifyOrder, SadayaVerificationError } from './verify.js'
 
 export { verifyOrder, depositAddressOf, keccak256, toChecksumAddress, SadayaVerificationError, FACTORIES, NATIVE, MAX_REVIEW_DAYS } from './verify.js'
-export const VERSION = '1.0.2'
+export const VERSION = '1.0.3'
 export const DEFAULT_BASE_URL = 'https://api.sadaya.app'
 
 const USER_AGENT = `sadaya-node/${VERSION.split('.').slice(0, 2).join('.')}`
