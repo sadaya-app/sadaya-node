@@ -1,6 +1,6 @@
 {
   "name": "@sadaya/node",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Sadaya API client for Node.js: orders, payouts, refunds, webhook, signature verification and verification of each order's address. No dependencies.",
   "type": "module",
   "main": "index.js",

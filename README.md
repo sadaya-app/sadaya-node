@@ -6,7 +6,7 @@ configure your webhook and verify its signatures. No dependencies: it uses the `
 > **Server-side only.** Your API key (`sk_live_...` or `sk_test_...`) must never reach a browser, a mobile app or a
 > repository. Keep it in an environment variable.
 
-Full API reference: https://docs.sadaya.app
+Full API reference: https://docs.sadaya.app/docs
 
 ## Installation
 
