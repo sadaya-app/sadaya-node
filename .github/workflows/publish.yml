@@ -1,0 +1,23 @@
+name: Publish to npm
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+      - run: npm install -g npm@latest
+      - name: The tag is the package's version
+        run: test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
+      - name: Publish, unless this version is already on npm
+        run: |
+          V=$(node -p "require('./package.json').version")
+          if npm view "@sadaya/node@$V" version >/dev/null 2>&1; then echo "v$V is already on npm"; else npm publish --access public; fi

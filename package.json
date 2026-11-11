@@ -1,0 +1,52 @@
+{
+  "name": "@sadaya/node",
+  "version": "1.0.0",
+  "description": "Sadaya API client for Node.js: orders, payouts, refunds, webhook, signature verification and verification of each order's address. No dependencies.",
+  "type": "module",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.js",
+      "default": "./index.js"
+    },
+    "./verify": {
+      "types": "./verify.d.ts",
+      "import": "./verify.js",
+      "default": "./verify.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "verify.js",
+    "verify.d.ts",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "keywords": [
+    "sadaya",
+    "payments",
+    "crypto",
+    "usdt",
+    "usdc",
+    "webhooks"
+  ],
+  "license": "MIT",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sadaya-app/sadaya-node.git"
+  },
+  "homepage": "https://github.com/sadaya-app/sadaya-node#readme",
+  "bugs": {
+    "url": "https://github.com/sadaya-app/sadaya-node/issues"
+  }
+}
