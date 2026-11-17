@@ -20,10 +20,23 @@ export interface Route {
   open_after?: number
 }
 
+/** The route of an order on Tron, a direct network: paid straight into your own Tron wallet, with no contract. */
+export interface DirectRoute {
+  direct: 'tron'
+  /** Your own Tron wallet (T...): it receives the whole payment; the fee comes out of your prepaid balance. */
+  merchant: string
+  /** Fee in basis points (100 = 1%). */
+  fee_bps: number
+  /** Only USDT on Tron. */
+  accepted: { chain_id: number; token: string }[]
+}
+
 /** What your store knows on its own. Never take it from the API. */
 export interface VerifyExpected {
-  /** Your payout wallet. */
-  payout: string
+  /** Your payout wallet: required for the orders of the EVM networks. */
+  payout?: string
+  /** Your own Tron wallet (T...): required for the orders on Tron. */
+  tronWallet?: string
   /** Your agreed fee, exact, in basis points. This or maxFeeBps is required. */
   feeBps?: number
   /** Or the highest fee you accept. */
@@ -42,7 +55,7 @@ export interface VerifyExpected {
  * What failed. uri: a payment link does not pay the order's address. network: the order has no chosen network yet,
  * so it has no address; verify it once it has one.
  */
-export type VerificationCheck = 'route' | 'payout' | 'fee' | 'fee_recipient' | 'recovery' | 'review' | 'networks' | 'address' | 'uri' | 'network'
+export type VerificationCheck = 'route' | 'payout' | 'tron_wallet' | 'fee' | 'fee_recipient' | 'recovery' | 'review' | 'networks' | 'address' | 'uri' | 'network'
 
 /** The order failed verification: do not show its address. */
 export declare class SadayaVerificationError extends Error {
@@ -59,7 +72,7 @@ export interface VerifiableOrder {
   deposit_address: string | null
   /** A deposit's route may take a coin only if networks lists it (check 'networks'). */
   mode?: 'charge' | 'deposit'
-  route?: Route | null
+  route?: Route | DirectRoute | null
   /** With uri, each payment link is also checked to pay deposit_address for what is still due (due_units). */
   networks?: { chain_id: number; token: string | null; symbol?: string | null; due_units?: string; uri?: string | null }[]
 }
@@ -70,6 +83,8 @@ export declare const FACTORIES: Readonly<Record<string, Readonly<{ implementatio
 export declare const MAX_REVIEW_DAYS: number
 /** 0x0000000000000000000000000000000000000000: the native coin in the accepted list. */
 export declare const NATIVE: string
+/** Tron: its chain id and its USDT (TRC-20), the only coin its orders take. */
+export declare const TRON: Readonly<{ chain_id: number; usdt: string }>
 /** Keccak-256, Ethereum's hash. */
 export declare function keccak256(data: Uint8Array): Uint8Array
 /** The address with its checksum capitals (EIP-55). */

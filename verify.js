@@ -6,6 +6,9 @@
 // the contract, and checks that the route pays you and that every payment link (uri) pays that address. An address, a
 // route or a link that does not match fails verification, and your store never shows it to the customer.
 //
+// An order on Tron is paid straight into your own Tron wallet, so there is no contract address there: it must pay
+// exactly the Tron wallet you configured, take only USDT on Tron, at your fee, and offer no payment link.
+//
 // No dependencies and no Node APIs: it runs the same on Node 18+, Cloudflare Workers and browsers.
 
 /**
@@ -30,6 +33,13 @@ const COIN_TOKENS = Object.freeze({
 export const MAX_REVIEW_DAYS = 31
 /** The network's native coin (ETH, BNB) in the accepted list. */
 export const NATIVE = '0x0000000000000000000000000000000000000000'
+/**
+ * Tron, a direct network: the customer pays straight into your own Tron wallet (T...), so there is no contract address to
+ * recompute. Its orders take only USDT on Tron (TRC-20).
+ */
+export const TRON = Object.freeze({ chain_id: 728126428, usdt: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t' })
+/** A Tron address as people write it: T and 33 characters of base58 (base58 is case-sensitive: compared exactly). */
+const isTron = a => typeof a === 'string' && /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(a)
 
 /** The order failed verification: do not show its address. `check` says what failed. */
 export class SadayaVerificationError extends Error {
@@ -184,14 +194,60 @@ function uriPays(n, address) {
   return !!m && same(m[1], n.token) && m[2] === chain && same(m[3], address) && m[4] === units
 }
 
+/** The fee a route charges you: exactly the agreed one (feeBps) or at most the highest you accept (maxFeeBps). One is required. */
+function checkFee(route, expected) {
+  if (expected.feeBps == null && expected.maxFeeBps == null) {
+    throw new SadayaVerificationError('Missing your agreed fee (feeBps) or the highest fee you accept (maxFeeBps): without it, the fee the order charges you cannot be checked.', 'fee')
+  }
+  if (expected.feeBps != null && route.fee_bps !== Number(expected.feeBps)) {
+    throw new SadayaVerificationError(`The order's fee (${route.fee_bps} basis points) is not the agreed one (${expected.feeBps}).`, 'fee')
+  }
+  if (expected.maxFeeBps != null && route.fee_bps > Number(expected.maxFeeBps)) {
+    throw new SadayaVerificationError(`The order's fee (${route.fee_bps} basis points) exceeds the maximum you accept (${expected.maxFeeBps}).`, 'fee')
+  }
+}
+
+/**
+ * An order on Tron: the customer pays straight into your own Tron wallet, with an exact amount whose 3rd and 4th decimals
+ * tell the payment apart. There is no contract: it must pay exactly the Tron wallet you configured (tronWallet), take only
+ * USDT on Tron, at your fee, and offer no payment link (Tron has no standard one: show the address and the exact amount).
+ */
+function verifyDirect(order, expected) {
+  if (!isTron(expected.tronWallet)) {
+    throw new SadayaVerificationError('Missing your Tron wallet (tronWallet) to verify an order on Tron: set it in your configuration, never take it from the API.', 'tron_wallet')
+  }
+  const route = order.route
+  const ok = route.direct === 'tron' && isTron(route.merchant) && Number.isInteger(route.fee_bps) && route.fee_bps >= 0 && route.fee_bps <= 1000
+    && Array.isArray(route.accepted) && route.accepted.length === 1 && route.accepted[0]?.chain_id === TRON.chain_id && route.accepted[0]?.token === TRON.usdt
+  if (!ok) throw new SadayaVerificationError('The order does not carry its complete route (route): do not show its address, and let Sadaya know.', 'route')
+  if (route.merchant !== expected.tronWallet) {
+    throw new SadayaVerificationError(`The order does not pay your Tron wallet (it pays ${route.merchant}): do not show its address, and let Sadaya know.`, 'tron_wallet')
+  }
+  checkFee(route, expected)
+  if (order.deposit_address !== route.merchant) {
+    throw new SadayaVerificationError('The order\'s address is not your Tron wallet: do not show it to the customer, and let Sadaya know.', 'address')
+  }
+  for (const n of order.networks || []) {
+    if (Number(n.chain_id) !== TRON.chain_id || n.token !== TRON.usdt) {
+      throw new SadayaVerificationError(`The order offers payment in ${n.symbol || n.token} on network ${n.chain_id}, which its route does not accept.`, 'networks')
+    }
+    if (n.uri != null) {
+      throw new SadayaVerificationError(`The payment link for ${n.symbol || 'the order'} on network ${n.chain_id} does not pay the order's address: do not show it, and let Sadaya know.`, 'uri')
+    }
+  }
+  return order
+}
+
 /**
  * Checks an order before its address is shown to the customer. Returns the order or throws SadayaVerificationError.
  * Besides the route and the address, it checks that each network's uri (when there is one) pays that address, with
  * that token, on that network and for what is still due (due_units), exactly as Sadaya builds it. An order with no
  * chosen network has no address: it throws check 'network'. A deposit whose route takes a coin its `networks` does not
  * list throws check 'networks'.
+ * An order on Tron (route.direct 'tron') is checked against your own Tron wallet instead (tronWallet): there is no contract.
  * expected: what your store knows on its own, never what the API says.
- *   payout        your payout wallet (required)
+ *   payout        your payout wallet (required for the orders of the EVM networks)
+ *   tronWallet    your own Tron wallet, T... (required for the orders on Tron)
  *   feeBps        your agreed fee in basis points (100 = 1%), exact; or maxFeeBps, the highest fee you accept (always
  *                 one of the two: without it, a route that charges you 10% would pass)
  *   feeRecipient  Sadaya's fee wallet, if you want to pin it
@@ -201,6 +257,8 @@ function uriPays(n, address) {
  *   now           the moment of the check, in milliseconds (now, by default)
  */
 export function verifyOrder(order, expected = {}) {
+  // an order on Tron pays your own Tron wallet: checked against tronWallet, with no contract address
+  if (order?.route?.direct != null) return verifyDirect(order, expected)
   if (!isAddress(expected.payout)) throw new SadayaVerificationError('Missing your payout wallet (payout) to verify the order: set it in your configuration, never take it from the API.', 'payout')
   // with no chosen network, the order has no address or route yet: there is nothing to show, nor to verify
   if (order && order.deposit_address == null && order.route == null) {
@@ -211,15 +269,7 @@ export function verifyOrder(order, expected = {}) {
   if (!same(route.merchant, expected.payout)) {
     throw new SadayaVerificationError(`The order does not pay your payout wallet (it pays ${route.merchant}): do not show its address, and let Sadaya know.`, 'payout')
   }
-  if (expected.feeBps == null && expected.maxFeeBps == null) {
-    throw new SadayaVerificationError('Missing your agreed fee (feeBps) or the highest fee you accept (maxFeeBps): without it, the fee the order charges you cannot be checked.', 'fee')
-  }
-  if (expected.feeBps != null && route.fee_bps !== Number(expected.feeBps)) {
-    throw new SadayaVerificationError(`The order's fee (${route.fee_bps} basis points) is not the agreed one (${expected.feeBps}).`, 'fee')
-  }
-  if (expected.maxFeeBps != null && route.fee_bps > Number(expected.maxFeeBps)) {
-    throw new SadayaVerificationError(`The order's fee (${route.fee_bps} basis points) exceeds the maximum you accept (${expected.maxFeeBps}).`, 'fee')
-  }
+  checkFee(route, expected)
   if (expected.feeRecipient && !same(route.fee_recipient, expected.feeRecipient)) {
     throw new SadayaVerificationError('The order\'s fee wallet is not the one you pinned.', 'fee_recipient')
   }

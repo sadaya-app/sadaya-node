@@ -53,7 +53,7 @@ deposit, the event is `order.credited` (see [Deposits](#deposits)).
 | `verify` | (no verification) | `{ payout, feeBps }`: every order with an address that the API returns is verified (its address and its payment links) before it reaches you. See [Verifying each order's address](#verifying-each-orders-address). |
 
 `sadaya.livemode` is `true` with an `sk_live_` key and `false` with an `sk_test_` key. The client sends
-`User-Agent: sadaya-node/1.0` (its major and minor version) and never reveals the key if you print the client with
+`User-Agent: sadaya-node/1.1` (its major and minor version) and never reveals the key if you print the client with
 `console.log`.
 
 ## Methods
@@ -303,6 +303,14 @@ with `check: 'review'`. Older orders (factory v2) verify as before.
 
 This library already knows the next factory version and still verifies v3 and v2 orders. The fee (`feeBps` or
 `maxFeeBps`) is required: without it, the fee each order charges you cannot be checked.
+
+**Orders on Tron.** On Tron (USDT TRC-20) the customer pays straight into your own Tron wallet, so there is no contract
+address to recompute. `verifyOrder(order, { tronWallet, feeBps })` checks that the route is Tron's (`route.direct` is
+`'tron'`), that it pays exactly your Tron wallet (`route.merchant` and `deposit_address`; otherwise `check: 'tron_wallet'`
+or `'address'`), that it takes only USDT on Tron, that the fee is the agreed one, and that no payment link is offered: Tron
+has no standard one, so show the address and the exact amount. The exact amount (`due`) carries a code in its 3rd and 4th
+decimals that tells the payment apart: show it as it is. Pass `payout` and `tronWallet` to verify every order; a store
+that charges only on Tron may pass `tronWallet` alone.
 
 On Cloudflare Workers or in the browser you can import the verification alone, with no Node APIs:
 `import { verifyOrder } from '@sadaya/node/verify'`.
