@@ -4,7 +4,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 import { verifyOrder, SadayaVerificationError, bitcoinKeyId, litecoinKeyId } from './verify.js'
 
 export { verifyOrder, depositAddressOf, keccak256, toChecksumAddress, SadayaVerificationError, FACTORIES, NATIVE, MAX_REVIEW_DAYS, TRON, BTC_ID, LTC_ID, bitcoinAddress, bitcoinKeyId, litecoinAddress, litecoinKeyId } from './verify.js'
-export const VERSION = '1.2.0'
+export const VERSION = '1.2.1'
 export const DEFAULT_BASE_URL = 'https://api.sadaya.app'
 
 const USER_AGENT = `sadaya-node/${VERSION.split('.').slice(0, 2).join('.')}`
