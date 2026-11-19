@@ -50,10 +50,10 @@ deposit, the event is `order.credited` (see [Deposits](#deposits)).
 | `baseUrl` | `https://api.sadaya.app` | The Sadaya API URL, without `/v1`. |
 | `timeoutMs` | `20000` | Maximum time per request, in milliseconds. |
 | `fetch` | `globalThis.fetch` | Your own `fetch` (tests, proxy). |
-| `verify` | (no verification) | `{ payout, feeBps }`: every order with an address that the API returns is verified (its address and its payment links) before it reaches you. See [Verifying each order's address](#verifying-each-orders-address). |
+| `verify` | (no verification) | `{ payout, feeBps }` (and `tronWallet`, `bitcoinKey` or `litecoinKey` for the orders on Tron, Bitcoin or Litecoin): every order with an address that the API returns is verified (its address and its payment links) before it reaches you. See [Verifying each order's address](#verifying-each-orders-address). |
 
 `sadaya.livemode` is `true` with an `sk_live_` key and `false` with an `sk_test_` key. The client sends
-`User-Agent: sadaya-node/1.1` (its major and minor version) and never reveals the key if you print the client with
+`User-Agent: sadaya-node/1.2` (its major and minor version) and never reveals the key if you print the client with
 `console.log`.
 
 ## Methods
@@ -113,8 +113,9 @@ await sadaya.orders.create({
 
 `orders.check(id)` looks at the chain for that order right now, like **Check now** in the dashboard, and returns it with
 its payments. It shares the dashboard's limit for your account (a `429` brings `err.retryAfter`), it only looks at live
-orders (a test order answers `400`: simulate its payment instead) and only while the order is watched (until its review
-window ends; after that, `409`).
+orders (a test order answers `400`: simulate its payment instead). It also finds a late payment after the order's review
+window has ended, with no transaction hash; an order on Tron answers `409` from 7 days after it expires, because a later
+transfer to your Tron wallet waits in your dashboard (My business, Tron) to be assigned to its order.
 
 `orders.cancel(id)` cancels an order that never received anything (waiting or expired): the checkout stops showing its
 address and you get `order.canceled`. One that already has a payment answers `409`, and canceling it again returns it as
@@ -276,7 +277,7 @@ try {
   // you can now show order.deposit_address and each network's uri, or send the customer to order.checkout_url
 } catch (err) {
   if (err instanceof SadayaVerificationError) {
-    // err.check says what failed: route, payout, fee, fee_recipient, recovery, review, networks, address, uri or network
+    // err.check says what failed: route, payout, tron_wallet, bitcoin_key, litecoin_key, fee, fee_recipient, recovery, review, networks, address, uri or network
     // do not show the address; let Sadaya know
   }
   throw err
@@ -311,6 +312,21 @@ or `'address'`), that it takes only USDT on Tron, that the fee is the agreed one
 has no standard one, so show the address and the exact amount. The exact amount (`due`) carries a code in its 3rd and 4th
 decimals that tells the payment apart: show it as it is. Pass `payout` and `tronWallet` to verify every order; a store
 that charges only on Tron may pass `tronWallet` alone.
+
+**Orders on Bitcoin.** On Bitcoin the customer pays straight into your own wallet too, at an address of its own for each
+order: the one your extended public key gives at the index the route carries. `verifyOrder(order, { bitcoinKey, feeBps })`
+derives that address again from your key (`bitcoinKey`: the zpub, or the xpub of a native SegWit account, that you gave
+Sadaya) and checks that the route comes from your key (`route.key_id`; otherwise `check: 'bitcoin_key'`), that the
+address is the one your key gives at `route.index` on `route.branch` (0 for a live order, 1 for a test one) and the
+order's (otherwise `check: 'address'`), that it takes only BTC, that the fee is the agreed one, and that the payment link
+(`uri`, a BIP21 `bitcoin:` link) pays that address for what is still due (`due_units`, in satoshis). An extended public
+key can only derive addresses, never spend; keep it private all the same, since it shows every payment of that account. A
+store that charges only on Bitcoin may pass `bitcoinKey` alone.
+
+**Orders on Litecoin.** The same as on Bitcoin, with your Litecoin key: `verifyOrder(order, { litecoinKey, feeBps })`
+(`litecoinKey`: the zpub, or the Ltub of a native SegWit account, that you gave Sadaya for Litecoin; otherwise
+`check: 'litecoin_key'`). Its addresses start with `ltc1q` and its payment link is a `litecoin:` one, in LTC. Your
+Bitcoin key never verifies an order on Litecoin, nor the other way round.
 
 On Cloudflare Workers or in the browser you can import the verification alone, with no Node APIs:
 `import { verifyOrder } from '@sadaya/node/verify'`.

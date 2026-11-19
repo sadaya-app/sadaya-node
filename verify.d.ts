@@ -31,12 +31,33 @@ export interface DirectRoute {
   accepted: { chain_id: number; token: string }[]
 }
 
+/** The route of an order on Bitcoin or Litecoin, direct networks: paid straight into your own wallet, at an address of your key. */
+export interface BitcoinRoute {
+  direct: 'bitcoin' | 'litecoin'
+  /** The address of your key at `index` on `branch`: it receives the whole payment; the fee comes out of your prepaid balance. */
+  merchant: string
+  /** Fee in basis points (100 = 1%). */
+  fee_bps: number
+  /** Only its coin: [{ chain_id: BTC_ID or LTC_ID, token: null }]. */
+  accepted: { chain_id: number; token: null }[]
+  /** The short id of the key that derives the address (bitcoinKeyId). */
+  key_id: string
+  /** 0 (receive) for a live order, 1 (change) for a test one. */
+  branch: 0 | 1
+  /** The address's index on that branch. */
+  index: number
+}
+
 /** What your store knows on its own. Never take it from the API. */
 export interface VerifyExpected {
   /** Your payout wallet: required for the orders of the EVM networks. */
   payout?: string
   /** Your own Tron wallet (T...): required for the orders on Tron. */
   tronWallet?: string
+  /** The extended public key you gave Sadaya for Bitcoin (zpub, or the xpub of a native SegWit account): required for the orders on Bitcoin. */
+  bitcoinKey?: string
+  /** The extended public key you gave Sadaya for Litecoin (zpub, or the Ltub of a native SegWit account): required for the orders on Litecoin. */
+  litecoinKey?: string
   /** Your agreed fee, exact, in basis points. This or maxFeeBps is required. */
   feeBps?: number
   /** Or the highest fee you accept. */
@@ -55,7 +76,7 @@ export interface VerifyExpected {
  * What failed. uri: a payment link does not pay the order's address. network: the order has no chosen network yet,
  * so it has no address; verify it once it has one.
  */
-export type VerificationCheck = 'route' | 'payout' | 'tron_wallet' | 'fee' | 'fee_recipient' | 'recovery' | 'review' | 'networks' | 'address' | 'uri' | 'network'
+export type VerificationCheck = 'route' | 'payout' | 'tron_wallet' | 'bitcoin_key' | 'litecoin_key' | 'fee' | 'fee_recipient' | 'recovery' | 'review' | 'networks' | 'address' | 'uri' | 'network'
 
 /** The order failed verification: do not show its address. */
 export declare class SadayaVerificationError extends Error {
@@ -72,7 +93,9 @@ export interface VerifiableOrder {
   deposit_address: string | null
   /** A deposit's route may take a coin only if networks lists it (check 'networks'). */
   mode?: 'charge' | 'deposit'
-  route?: Route | DirectRoute | null
+  route?: Route | DirectRoute | BitcoinRoute | null
+  /** An order on Bitcoin or Litecoin: live ones receive on branch 0 of your key, test ones on branch 1. */
+  livemode?: boolean
   /** With uri, each payment link is also checked to pay deposit_address for what is still due (due_units). */
   networks?: { chain_id: number; token: string | null; symbol?: string | null; due_units?: string; uri?: string | null }[]
 }
@@ -85,6 +108,18 @@ export declare const MAX_REVIEW_DAYS: number
 export declare const NATIVE: string
 /** Tron: its chain id and its USDT (TRC-20), the only coin its orders take. */
 export declare const TRON: Readonly<{ chain_id: number; usdt: string }>
+/** Bitcoin has no chain id: the one Sadaya uses for it (20000000000001). */
+export declare const BTC_ID: number
+/** The native SegWit address (bc1q...) of extended public key `key` (zpub or xpub) at `index` of `branch` (0 receive, 1 change), or null. */
+export declare function bitcoinAddress(key: string, index: number, branch?: 0 | 1): string | null
+/** The short id the API gives an extended public key (16 hex characters), or null when it is not a valid zpub or xpub. */
+export declare function bitcoinKeyId(key: string): string | null
+/** Litecoin has no chain id: the one Sadaya uses for it (20000000000003). */
+export declare const LTC_ID: number
+/** The native SegWit address (ltc1q...) of extended public key `key` (zpub or Ltub) at `index` of `branch` (0 receive, 1 change), or null. */
+export declare function litecoinAddress(key: string, index: number, branch?: 0 | 1): string | null
+/** The short id the API gives a Litecoin extended public key (16 hex characters), or null when it is not a valid zpub or Ltub. */
+export declare function litecoinKeyId(key: string): string | null
 /** Keccak-256, Ethereum's hash. */
 export declare function keccak256(data: Uint8Array): Uint8Array
 /** The address with its checksum capitals (EIP-55). */

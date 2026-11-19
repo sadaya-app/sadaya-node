@@ -9,7 +9,14 @@
 // An order on Tron is paid straight into your own Tron wallet, so there is no contract address there: it must pay
 // exactly the Tron wallet you configured, take only USDT on Tron, at your fee, and offer no payment link.
 //
+// An order on Bitcoin is paid straight into your own wallet too, at an address of its own: the one your extended public
+// key (the zpub or xpub you gave Sadaya) derives at the index its route carries. This library derives it again from your
+// key (bitcoin.js) and checks that it is the order's, that it takes only BTC, at your fee, and that its payment link pays it.
+//
 // No dependencies and no Node APIs: it runs the same on Node 18+, Cloudflare Workers and browsers.
+
+import { BTC_ID, LTC_ID, bitcoinAddress, bitcoinKeyId, litecoinAddress, litecoinKeyId } from './bitcoin.js'
+export { BTC_ID, LTC_ID, bitcoinAddress, bitcoinKeyId, litecoinAddress, litecoinKeyId } from './bitcoin.js'
 
 /**
  * Sadaya's official factories (the same address on every EVM network), the logic contract of their clones and their
@@ -46,7 +53,7 @@ export class SadayaVerificationError extends Error {
   constructor(message, check) {
     super(message)
     this.name = 'SadayaVerificationError'
-    /** route | payout | fee | fee_recipient | recovery | review | networks | address | uri | network */
+    /** route | payout | tron_wallet | bitcoin_key | litecoin_key | fee | fee_recipient | recovery | review | networks | address | uri | network */
     this.check = check
   }
 }
@@ -238,16 +245,72 @@ function verifyDirect(order, expected) {
   return order
 }
 
+// the networks of their own coin, by route.direct: each one's id, its option and check, its kinds of key, its addresses (native
+// SegWit, the only kind the gateway derives: the prefix and 38 characters of bech32), its payment link exactly as the gateway
+// builds it (BIP21: the address and what is still due, in its coin) and its derivation
+const B32 = '[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{38}'
+const UTXO = {
+  bitcoin: { id: BTC_ID, name: 'Bitcoin', option: 'bitcoinKey', check: 'bitcoin_key', kinds: 'zpub or xpub', address: new RegExp(`^bc1q${B32}$`),
+    uri: new RegExp(`^bitcoin:(bc1q${B32})\\?amount=(\\d+)(?:\\.(\\d{1,8}))?$`), derive: bitcoinAddress, keyId: bitcoinKeyId },
+  litecoin: { id: LTC_ID, name: 'Litecoin', option: 'litecoinKey', check: 'litecoin_key', kinds: 'zpub or Ltub', address: new RegExp(`^ltc1q${B32}$`),
+    uri: new RegExp(`^litecoin:(ltc1q${B32})\\?amount=(\\d+)(?:\\.(\\d{1,8}))?$`), derive: litecoinAddress, keyId: litecoinKeyId },
+}
+
+/**
+ * An order on Bitcoin or Litecoin: the customer pays straight into your own wallet, at the address your extended public key
+ * (bitcoinKey or litecoinKey: the one you gave Sadaya for that network) derives at the route's index, on branch 0 (receive) for
+ * a live order and 1 (change) for a test one. There is no contract: the address is derived here again from your key, and it
+ * must be the route's and the order's; the route must come from your key (key_id) and take only its coin, at your fee; and
+ * each payment link must pay that address for what is still due (due_units, in the coin's smallest unit).
+ */
+function verifyUtxo(order, expected, n) {
+  const key = expected[n.option], keyId = n.keyId(key)
+  if (!keyId) {
+    throw new SadayaVerificationError(`Missing your ${n.name} public key (${n.option}: the ${n.kinds} you gave Sadaya) to verify an order on ${n.name}: set it in your configuration, never take it from the API.`, n.check)
+  }
+  const route = order.route
+  const ok = typeof route.merchant === 'string' && n.address.test(route.merchant) && Number.isInteger(route.fee_bps) && route.fee_bps >= 0 && route.fee_bps <= 1000
+    && Array.isArray(route.accepted) && route.accepted.length === 1 && route.accepted[0]?.chain_id === n.id && route.accepted[0]?.token == null
+    && typeof route.key_id === 'string' && (route.branch === 0 || route.branch === 1) && Number.isInteger(route.index) && route.index >= 0 && route.index < 2 ** 31
+    // a live order receives on branch 0, a test one on branch 1
+    && (typeof order.livemode !== 'boolean' || route.branch === (order.livemode ? 0 : 1))
+  if (!ok) throw new SadayaVerificationError('The order does not carry its complete route (route): do not show its address, and let Sadaya know.', 'route')
+  if (route.key_id !== keyId) {
+    throw new SadayaVerificationError(`The order's address does not come from your ${n.name} key (it comes from key ${route.key_id}): do not show it, and let Sadaya know.`, n.check)
+  }
+  checkFee(route, expected)
+  const address = n.derive(key, route.index, route.branch)
+  if (route.merchant !== address || order.deposit_address !== address) {
+    throw new SadayaVerificationError(`The order's address is not the one your ${n.name} key gives at its index: do not show it to the customer, and let Sadaya know.`, 'address')
+  }
+  for (const x of order.networks || []) {
+    if (Number(x.chain_id) !== n.id || x.token != null) {
+      throw new SadayaVerificationError(`The order offers payment in ${x.symbol || x.token} on network ${x.chain_id}, which its route does not accept.`, 'networks')
+    }
+    if (x.uri == null) continue
+    const m = n.uri.exec(x.uri)
+    const units = m ? BigInt(m[2]) * 100000000n + BigInt((m[3] || '').padEnd(8, '0')) : null
+    if (!m || m[1] !== address || !/^\d+$/.test(String(x.due_units)) || units !== BigInt(x.due_units)) {
+      throw new SadayaVerificationError(`The payment link for ${x.symbol || 'the order'} on network ${x.chain_id} does not pay the order's address: do not show it, and let Sadaya know.`, 'uri')
+    }
+  }
+  return order
+}
+
 /**
  * Checks an order before its address is shown to the customer. Returns the order or throws SadayaVerificationError.
  * Besides the route and the address, it checks that each network's uri (when there is one) pays that address, with
  * that token, on that network and for what is still due (due_units), exactly as Sadaya builds it. An order with no
  * chosen network has no address: it throws check 'network'. A deposit whose route takes a coin its `networks` does not
  * list throws check 'networks'.
- * An order on Tron (route.direct 'tron') is checked against your own Tron wallet instead (tronWallet): there is no contract.
+ * An order on Tron (route.direct 'tron') is checked against your own Tron wallet instead (tronWallet), and one on Bitcoin or
+ * Litecoin (route.direct 'bitcoin', 'litecoin') against your extended public key there (bitcoinKey, litecoinKey): there is no
+ * contract.
  * expected: what your store knows on its own, never what the API says.
  *   payout        your payout wallet (required for the orders of the EVM networks)
  *   tronWallet    your own Tron wallet, T... (required for the orders on Tron)
+ *   bitcoinKey    the extended public key you gave Sadaya for Bitcoin, zpub or xpub (required for the orders on Bitcoin)
+ *   litecoinKey   the extended public key you gave Sadaya for Litecoin, zpub or Ltub (required for the orders on Litecoin)
  *   feeBps        your agreed fee in basis points (100 = 1%), exact; or maxFeeBps, the highest fee you accept (always
  *                 one of the two: without it, a route that charges you 10% would pass)
  *   feeRecipient  Sadaya's fee wallet, if you want to pin it
@@ -257,7 +320,10 @@ function verifyDirect(order, expected) {
  *   now           the moment of the check, in milliseconds (now, by default)
  */
 export function verifyOrder(order, expected = {}) {
-  // an order on Tron pays your own Tron wallet: checked against tronWallet, with no contract address
+  // an order on a direct network pays your own wallet, with no contract address: Bitcoin's and Litecoin's are checked against
+  // your key there (bitcoinKey, litecoinKey), Tron's against tronWallet
+  const direct = order?.route?.direct
+  if (typeof direct === 'string' && Object.hasOwn(UTXO, direct)) return verifyUtxo(order, expected, UTXO[direct])
   if (order?.route?.direct != null) return verifyDirect(order, expected)
   if (!isAddress(expected.payout)) throw new SadayaVerificationError('Missing your payout wallet (payout) to verify the order: set it in your configuration, never take it from the API.', 'payout')
   // with no chosen network, the order has no address or route yet: there is nothing to show, nor to verify

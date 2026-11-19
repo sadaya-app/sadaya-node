@@ -1,10 +1,10 @@
 // @sadaya/node: Sadaya API client for Node 18 or later, with no dependencies (global fetch and node:crypto).
 // Use it only on your server: the API key (sk_live_ or sk_test_) must never reach a browser or a mobile app.
 import { createHmac, timingSafeEqual } from 'node:crypto'
-import { verifyOrder, SadayaVerificationError } from './verify.js'
+import { verifyOrder, SadayaVerificationError, bitcoinKeyId, litecoinKeyId } from './verify.js'
 
-export { verifyOrder, depositAddressOf, keccak256, toChecksumAddress, SadayaVerificationError, FACTORIES, NATIVE, MAX_REVIEW_DAYS, TRON } from './verify.js'
-export const VERSION = '1.1.0'
+export { verifyOrder, depositAddressOf, keccak256, toChecksumAddress, SadayaVerificationError, FACTORIES, NATIVE, MAX_REVIEW_DAYS, TRON, BTC_ID, LTC_ID, bitcoinAddress, bitcoinKeyId, litecoinAddress, litecoinKeyId } from './verify.js'
+export const VERSION = '1.2.0'
 export const DEFAULT_BASE_URL = 'https://api.sadaya.app'
 
 const USER_AGENT = `sadaya-node/${VERSION.split('.').slice(0, 2).join('.')}`
@@ -74,8 +74,10 @@ export class Sadaya {
 
   /**
    * @param {{ apiKey: string, baseUrl?: string, timeoutMs?: number, fetch?: Function, verify?: object }} options
-   * verify: { payout, tronWallet?, feeBps | maxFeeBps, feeRecipient?, recovery? }. tronWallet: your own Tron wallet (T...), to verify
-   * the orders on Tron; a store that charges only on Tron may give it without payout. With this option, every order with an address that
+   * verify: { payout, tronWallet?, bitcoinKey?, litecoinKey?, feeBps | maxFeeBps, feeRecipient?, recovery? }. tronWallet: your own Tron
+   * wallet (T...), to verify the orders on Tron; bitcoinKey and litecoinKey: the extended public keys (zpub or xpub; zpub or Ltub) you
+   * gave Sadaya, to verify the orders on Bitcoin and on Litecoin. A
+   * store that charges only on those networks may give them without payout. With this option, every order with an address that
    * the API returns is checked before it reaches you (its address and its payment links are recomputed here, without
    * trusting Sadaya): if they do not match, it throws SadayaVerificationError and you must not show that address. An
    * order with no network chosen yet comes back as it is: it has no address yet.
@@ -89,12 +91,21 @@ export class Sadaya {
     if (!/^https?:\/\/[^\s/?#]+/i.test(base)) throw usageError(`Invalid baseUrl: "${baseUrl}". Use a URL such as ${DEFAULT_BASE_URL}`)
     if (typeof timeoutMs !== 'number' || !Number.isFinite(timeoutMs) || timeoutMs <= 0) throw usageError('timeoutMs must be a number of milliseconds greater than 0.')
     if (typeof fetchImpl !== 'function') throw usageError('No fetch available: use Node 18 or later, or pass your own function in the fetch option.')
-    // your payout wallet, or only your Tron wallet when you charge only on Tron (its orders are checked against it)
+    // your payout wallet, or only your own wallet of a direct network when you charge only there: your Tron wallet, your
+    // Bitcoin key, your Litecoin key (their orders are checked against them)
     const tron = verify && typeof verify === 'object' && verify.tronWallet != null
     if (tron && !/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(String(verify.tronWallet))) {
       throw usageError('verify.tronWallet must be your own Tron wallet (T and 33 characters), taken from your own configuration, never from the API.')
     }
-    if (verify !== undefined && (!verify || typeof verify !== 'object' || ((verify.payout != null || !tron) && !/^0x[0-9a-fA-F]{40}$/.test(String(verify.payout || ''))))) {
+    const btc = verify && typeof verify === 'object' && verify.bitcoinKey != null
+    if (btc && !bitcoinKeyId(verify.bitcoinKey)) {
+      throw usageError('verify.bitcoinKey must be the extended public key you gave Sadaya for Bitcoin (a zpub, or the xpub of a native SegWit account), taken from your own configuration, never from the API. Never a private key.')
+    }
+    const ltc = verify && typeof verify === 'object' && verify.litecoinKey != null
+    if (ltc && !litecoinKeyId(verify.litecoinKey)) {
+      throw usageError('verify.litecoinKey must be the extended public key you gave Sadaya for Litecoin (a zpub, or the Ltub of a native SegWit account), taken from your own configuration, never from the API. Never a private key.')
+    }
+    if (verify !== undefined && (!verify || typeof verify !== 'object' || ((verify.payout != null || !(tron || btc || ltc)) && !/^0x[0-9a-fA-F]{40}$/.test(String(verify.payout || ''))))) {
       throw usageError('verify.payout must be your payout wallet (0x and 40 hex characters), taken from your own configuration, never from the API.')
     }
     if (verify && verify.feeBps == null && verify.maxFeeBps == null) {

@@ -1,6 +1,6 @@
 {
   "name": "@sadaya/node",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Sadaya API client for Node.js: orders, payouts, refunds, webhook, signature verification and verification of each order's address. No dependencies.",
   "type": "module",
   "main": "index.js",
@@ -23,6 +23,7 @@
     "index.d.ts",
     "verify.js",
     "verify.d.ts",
+    "bitcoin.js",
     "README.md"
   ],
   "engines": {
@@ -37,6 +38,7 @@
     "crypto",
     "usdt",
     "usdc",
+    "bitcoin",
     "webhooks"
   ],
   "license": "MIT",
