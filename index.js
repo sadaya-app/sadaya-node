@@ -4,7 +4,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 import { verifyOrder, SadayaVerificationError, bitcoinKeyId, litecoinKeyId } from './verify.js'
 
 export { verifyOrder, depositAddressOf, keccak256, toChecksumAddress, SadayaVerificationError, FACTORIES, NATIVE, MAX_REVIEW_DAYS, TRON, BTC_ID, LTC_ID, bitcoinAddress, bitcoinKeyId, litecoinAddress, litecoinKeyId } from './verify.js'
-export const VERSION = '1.2.1'
+export const VERSION = '1.3.0'
 export const DEFAULT_BASE_URL = 'https://api.sadaya.app'
 
 const USER_AGENT = `sadaya-node/${VERSION.split('.').slice(0, 2).join('.')}`
@@ -74,7 +74,7 @@ export class Sadaya {
 
   /**
    * @param {{ apiKey: string, baseUrl?: string, timeoutMs?: number, fetch?: Function, verify?: object }} options
-   * verify: { payout, tronWallet?, bitcoinKey?, litecoinKey?, feeBps | maxFeeBps, feeRecipient?, recovery? }. tronWallet: your own Tron
+   * verify: { payout, tronWallet?, bitcoinKey?, litecoinKey?, feeBps | maxFeeBps, feeRecipient?, handler? }. tronWallet: your own Tron
    * wallet (T...), to verify the orders on Tron; bitcoinKey and litecoinKey: the extended public keys (zpub or xpub; zpub or Ltub) you
    * gave Sadaya, to verify the orders on Bitcoin and on Litecoin. A
    * store that charges only on those networks may give them without payout. With this option, every order with an address that

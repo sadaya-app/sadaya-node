@@ -9,7 +9,7 @@ export interface Route {
   /** Fee in basis points (100 = 1%). The contract accepts at most 1000. */
   fee_bps: number
   /** The wallet that handles misdirected payments; it can never move what the order accepts. */
-  recovery: string
+  handler: string
   /** The only assets that are split: network and token pairs (0x000... = the network's native coin). */
   accepted: { chain_id: number; token: string }[]
   /** The factory that creates the address (the same on every EVM network). */
@@ -64,8 +64,8 @@ export interface VerifyExpected {
   maxFeeBps?: number
   /** Sadaya's fee wallet, if you want to pin it. */
   feeRecipient?: string
-  /** The route's recovery address, if you want to pin it. */
-  recovery?: string
+  /** The route's handler address, if you want to pin it. */
+  handler?: string
   /** The longest review window you accept, in days (MAX_REVIEW_DAYS, 31, by default). */
   maxReviewDays?: number
   /** The moment of the check, in milliseconds (now, by default). */
@@ -76,7 +76,7 @@ export interface VerifyExpected {
  * What failed. uri: a payment link does not pay the order's address. network: the order has no chosen network yet,
  * so it has no address; verify it once it has one.
  */
-export type VerificationCheck = 'route' | 'payout' | 'tron_wallet' | 'bitcoin_key' | 'litecoin_key' | 'fee' | 'fee_recipient' | 'recovery' | 'review' | 'networks' | 'address' | 'uri' | 'network'
+export type VerificationCheck = 'route' | 'payout' | 'tron_wallet' | 'bitcoin_key' | 'litecoin_key' | 'fee' | 'fee_recipient' | 'handler' | 'review' | 'networks' | 'address' | 'uri' | 'network'
 
 /** The order failed verification: do not show its address. */
 export declare class SadayaVerificationError extends Error {

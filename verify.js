@@ -1,7 +1,7 @@
 // Verifies an order's address without trusting Sadaya.
 //
 // Every order is paid to an address that is a contract: CREATE2 from the official factory, with the route sealed
-// inside (your payout wallet, the fee, the `recovery` address, what the order accepts and, since factory v3, who splits
+// inside (your payout wallet, the fee, the `handler` address, what the order accepts and, since factory v3, who splits
 // the order during the review window and until when). This library recomputes that address with the same formula as
 // the contract, and checks that the route pays you and that every payment link (uri) pays that address. An address, a
 // route or a link that does not match fails verification, and your store never shows it to the customer.
@@ -53,7 +53,7 @@ export class SadayaVerificationError extends Error {
   constructor(message, check) {
     super(message)
     this.name = 'SadayaVerificationError'
-    /** route | payout | tron_wallet | bitcoin_key | litecoin_key | fee | fee_recipient | recovery | review | networks | address | uri | network */
+    /** route | payout | tron_wallet | bitcoin_key | litecoin_key | fee | fee_recipient | handler | review | networks | address | uri | network */
     this.check = check
   }
 }
@@ -142,12 +142,12 @@ export function acceptedHash(accepted) {
 }
 
 /**
- * What the factory seals into each clone: merchant, fee wallet, fee, `recovery` address and the accepted list (94 bytes,
+ * What the factory seals into each clone: merchant, fee wallet, fee, `handler` address and the accepted list (94 bytes,
  * factory v2) and, in v3 and v4, who splits the order during the review window and when that window ends (119 bytes).
  */
 export function routeArgs(route, version = route.open_after != null ? 3 : 2) {
   const fee = Number(route.fee_bps)
-  const v2 = [fromHex(route.merchant), fromHex(route.fee_recipient), new Uint8Array([fee >> 8, fee & 0xff]), fromHex(route.recovery), acceptedHash(route.accepted)]
+  const v2 = [fromHex(route.merchant), fromHex(route.fee_recipient), new Uint8Array([fee >> 8, fee & 0xff]), fromHex(route.handler), acceptedHash(route.accepted)]
   if (version < 3) return concat(v2)
   const end = new Uint8Array(5) // uint40, big-endian
   let t = BigInt(route.open_after)
@@ -174,7 +174,7 @@ export function depositAddressOf(order) {
 const isWallet = a => isAddress(a) && !/^0x0{40}$/i.test(a)
 
 function checkRoute(route) {
-  const ok = route && isWallet(route.merchant) && isWallet(route.fee_recipient) && isWallet(route.recovery) && isAddress(route.factory)
+  const ok = route && isWallet(route.merchant) && isWallet(route.fee_recipient) && isWallet(route.handler) && isAddress(route.factory)
     && Number.isInteger(route.fee_bps) && route.fee_bps >= 0 && route.fee_bps <= 1000
     && Array.isArray(route.accepted) && route.accepted.length > 0 && route.accepted.length <= 64
     // a network id the contract can read (uint64) and that a JavaScript number holds exactly
@@ -314,7 +314,7 @@ function verifyUtxo(order, expected, n) {
  *   feeBps        your agreed fee in basis points (100 = 1%), exact; or maxFeeBps, the highest fee you accept (always
  *                 one of the two: without it, a route that charges you 10% would pass)
  *   feeRecipient  Sadaya's fee wallet, if you want to pin it
- *   recovery      the route's recovery address, if you want to pin it
+ *   handler       the route's handler address, if you want to pin it
  *   maxReviewDays the longest review window you accept, in days (MAX_REVIEW_DAYS, 31, by default): until it ends only
  *                 Sadaya can split the order
  *   now           the moment of the check, in milliseconds (now, by default)
@@ -339,8 +339,8 @@ export function verifyOrder(order, expected = {}) {
   if (expected.feeRecipient && !same(route.fee_recipient, expected.feeRecipient)) {
     throw new SadayaVerificationError('The order\'s fee wallet is not the one you pinned.', 'fee_recipient')
   }
-  if (expected.recovery && !same(route.recovery, expected.recovery)) {
-    throw new SadayaVerificationError('The order\'s recovery address is not the one you pinned.', 'recovery')
+  if (expected.handler && !same(route.handler, expected.handler)) {
+    throw new SadayaVerificationError('The order\'s handler address is not the one you pinned.', 'handler')
   }
   // factories v3 and v4: the window in which only Sadaya can split the order cannot be longer than the one you accept
   if (route.open_after != null) {

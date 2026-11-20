@@ -277,7 +277,7 @@ try {
   // you can now show order.deposit_address and each network's uri, or send the customer to order.checkout_url
 } catch (err) {
   if (err instanceof SadayaVerificationError) {
-    // err.check says what failed: route, payout, tron_wallet, bitcoin_key, litecoin_key, fee, fee_recipient, recovery, review, networks, address, uri or network
+    // err.check says what failed: route, payout, tron_wallet, bitcoin_key, litecoin_key, fee, fee_recipient, handler, review, networks, address, uri or network
     // do not show the address; let Sadaya know
   }
   throw err
@@ -288,7 +288,7 @@ It checks that `route.merchant` is your wallet, that the fee is the agreed one (
 that everything the checkout offers is in the accepted list (and, in a deposit, that every coin its route takes is
 listed in `networks`; otherwise `check: 'networks'`), that the recomputed address is the order's, and that each
 network's `uri` pays that address, with that token, on that network and for what is still due (`due_units`), exactly
-as Sadaya builds it (otherwise, `check: 'uri'`). You can also pin `feeRecipient` and `recovery`. For a single order:
+as Sadaya builds it (otherwise, `check: 'uri'`). You can also pin `feeRecipient` and `handler`, Sadaya's addresses in the route. For a single order:
 `verifyOrder(order, { payout, feeBps })`.
 
 **With no chosen network there is nothing to verify.** An order created without `network` comes back with
