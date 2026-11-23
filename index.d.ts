@@ -144,6 +144,8 @@ export interface Order {
 }
 
 export interface Payment {
+  /** The payment's identifier (pay_...): one per transfer, the same in every event and response. Use it to credit each payment exactly once. */
+  id: string
   chain_id: number
   symbol: string | null
   /** Base units (integer string). */
@@ -167,6 +169,10 @@ export interface Payment {
   price_usd?: string | null
   /** What it counts for in the order's currency: in a USD deposit, the dollars credited. null while its price is not known. */
   value?: string | null
+  /** When Sadaya first saw it. */
+  detected_at?: string | null
+  /** When it reached its required confirmations; null until then. */
+  confirmed_at?: string | null
 }
 
 /** What GET /v1/orders/{id} returns. */
@@ -262,6 +268,8 @@ export interface Settlement {
 
 /** The data of the order.* events: the order, plus a detail in some of them. */
 export interface OrderEventData extends Order {
+  /** Each payment seen at the order's address, oldest first, each with its own id. In a deposit, credit each one once, by its id. */
+  payments: Payment[]
   /**
    * order.settled: the transaction that split the order (amounts in base units). If the split was not sent by Sadaya,
    * id is null and external is true.
